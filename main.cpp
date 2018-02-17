@@ -5,6 +5,7 @@
 #include <cmath>
 #include <string>
 #include <thread>
+#include <random>
 
 using std::cout;
 using std::endl;
@@ -14,6 +15,7 @@ using std::pair;
 using std::tuple;
 using std::get;
 using std::size_t;
+using std::thread;
 
 double euclidean(const vector<double>& x1, const vector<double>& x2) {
     double d2 = 0.0;
@@ -85,12 +87,6 @@ vector<double> pdist(const vector<T>& x, double (*dist)(const T&, const T&)) {
     return v;
 }
 
-//template <class T>
-//vector<double> pdist1(const vector<T>& x, const T& q) {
-//    // Distance vector between points in x and single point q
-//
-//}
-
 template <typename Iterator>
 vector<pair<Iterator, Iterator>> split_chunks(Iterator begin, Iterator end, size_t n) {
     // Divide iterable into multiple iterables of similar size
@@ -120,8 +116,8 @@ vector<pair<Iterator, Iterator>> split_chunks(Iterator begin, Iterator end, size
 }
 
 template <class T>
-void pdist_range(vector<tuple<size_t,size_t,size_t>>::iterator begin, vector<tuple<size_t,size_t,size_t>>::iterator end,
-                 vector<double>& v, const vector<T> &x, double (*dist)(const T &, const T &)) {
+void pdist_range(vector<tuple<size_t,size_t,size_t>>::const_iterator begin, vector<tuple<size_t,size_t,size_t>>::const_iterator end,
+                 vector<double>& v, const vector<T>& x, double (*dist)(const T &, const T &)) {
     // Helper function to calculate pairwise distances specified by range
     for (auto it = begin; it != end; ++it) {
         v[get<2>(*it)] = dist(x[get<0>(*it)], x[get<1>(*it)]);
@@ -146,7 +142,6 @@ vector<double> ppdist(const vector<T> &x, double (*dist)(const T &, const T &), 
 
     // Split indices between threads
     auto chunks = split_chunks(inds.begin(), inds.end(), n_threads);
-
     // Debug: show inds assigned to each chunk
 //    for (auto chunk : chunks) {
 //        for (auto it = chunk.first; it != chunk.second; ++it) {
@@ -157,10 +152,18 @@ vector<double> ppdist(const vector<T> &x, double (*dist)(const T &, const T &), 
 
     // Run
     vector<double> v (nv, 0.0);
+    // Single-threaded
+//    for (auto chunk : chunks) {
+//        pdist_range(chunk.first, chunk.second, v, x, dist);
+//    }
+    // Multi-threaded
+    vector<thread> ths;
     for (auto chunk : chunks) {
-        pdist_range(chunk.first, chunk.second, v, x, dist);
+        ths.emplace_back(thread(pdist_range<string>, chunk.first, chunk.second, std::ref(v), std::cref(x), dist));  // CLion incorrectly reports wrong # args
     }
-
+    for (auto &th: ths) {
+        th.join();
+    }
     return v;
 }
 
@@ -190,6 +193,27 @@ void print_mat(vector<vector<double>>& M) {
         }
         cout << endl;
     }
+}
+
+string random_str(size_t n=20) {
+    // Generate random string
+    // TODO: also make it have a random length, more efficient initialization of the RNG
+    const static string chars = "abcdefghijklmnaoqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+    std::mt19937_64 gen { std::random_device()() };
+    std::uniform_int_distribution<size_t> dist { 0, chars.length()-1 };
+    std::string str;
+    std::generate_n(std::back_inserter(str), n, [&] { return chars[dist(gen)]; });
+    return str;
+}
+
+vector<string> random_strs(int N) {
+    // Generate vector of random strings
+    vector<string> strs;
+    strs.reserve(N);
+    for (size_t i = 0; i < N; ++i) {
+        strs.emplace_back(random_str());
+    }
+    return strs;
 }
 
 int main() {
@@ -230,14 +254,14 @@ int main() {
     // Test out distance matrix calc
     cout << "Calculating distance matrix in vector form..." << endl;
     vector<string> strs {s0, s1, s2, s3};
-    vector<double> dv = pdist(strs, levenstein);  // CLion incorrectly says dist arg is an error
+    vector<double> dv = pdist(strs, levenstein); // CLion incorrectly says dist arg is an error
     for (double dvi : dv) {
         cout << dvi << endl;
     }
 
     cout << "Calculating distance matrix in vector form in parallel..." << endl;
     int n_threads = 4;
-    vector<double> dvp = ppdist(strs, levenstein, n_threads);  // CLion incorrectly says dist arg is an error
+    vector<double> dvp = ppdist(strs, levenstein, n_threads);
     for (double dvi : dvp) {
         cout << dvi << endl;
     }
@@ -254,6 +278,17 @@ int main() {
 
     auto dm = squareform(dv);
     print_mat(dm);
+
+    // Tests on random strings
+    cout << "Doing tests on random strings..." << endl;
+    vector<string> xs = random_strs(15);
+    for (string x : xs) {
+        cout << x << endl;
+    }
+
+    vector<double> xsv = ppdist(xs, levenstein, n_threads);
+    vector<vector<double>> xsm = squareform(xsv);
+    print_mat(xsm);
 
     return 0;
 }
