@@ -15,7 +15,6 @@ using std::pair;
 using std::tuple;
 using std::get;
 using std::size_t;
-using std::thread;
 
 double euclidean(const vector<double>& x1, const vector<double>& x2) {
     double d2 = 0.0;
@@ -117,7 +116,7 @@ vector<pair<Iterator, Iterator>> split_chunks(Iterator begin, Iterator end, size
 
 template <class T>
 void pdist_range(vector<tuple<size_t,size_t,size_t>>::const_iterator begin, vector<tuple<size_t,size_t,size_t>>::const_iterator end,
-                 vector<double>& v, const vector<T>& x, double (*dist)(const T &, const T &)) {
+                 vector<double>& v, const vector<T>& x, double (*dist)(const T&, const T&)) {
     // Helper function to calculate pairwise distances specified by range
     for (auto it = begin; it != end; ++it) {
         v[get<2>(*it)] = dist(x[get<0>(*it)], x[get<1>(*it)]);
@@ -157,9 +156,9 @@ vector<double> ppdist(const vector<T> &x, double (*dist)(const T &, const T &), 
 //        pdist_range(chunk.first, chunk.second, v, x, dist);
 //    }
     // Multi-threaded
-    vector<thread> ths;
+    vector<std::thread> ths;
     for (auto chunk : chunks) {
-        ths.emplace_back(thread(pdist_range<string>, chunk.first, chunk.second, std::ref(v), std::cref(x), dist));  // CLion incorrectly reports wrong # args
+        ths.emplace_back(std::thread(pdist_range<T>, chunk.first, chunk.second, std::ref(v), std::cref(x), dist));  // CLion incorrectly reports wrong # args
     }
     for (auto &th: ths) {
         th.join();
