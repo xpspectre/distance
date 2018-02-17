@@ -32,7 +32,6 @@ double levenstein(const string& s1, const string& s2, double del, double ins, do
     // variable length array allowed in GCC
     double dist[n_rows][n_cols]; // don't need to 0-fill since it's filled from NW-> SE when running below
 
-
     // Source prefixes can be transformed into empty strings by deletions
     for (int row = 1; row < n_rows; ++row) {
         dist[row][0] = row * del;
@@ -69,14 +68,35 @@ double levenstein(const string& s1, const string& s2) {
 }
 
 template <class T>
-vector<double> dist_mat(const vector<T>& x, double (*dist)(const T&, const T&)) {
+vector<double> pdist(const vector<T> &x, double (*dist)(const T &, const T &)) {
     // Distance matrix between all pairs in x, in order of x, in vector form (lower triangle entries), using specified
     // distance function
     auto nx = x.size();
-    vector<double> d (nx * (nx-1) / 2, 0.0);
-    d[0] = dist(x[0], x[1]);
-    // TODO: and so on
-    return d;
+    vector<double> v (nx*(nx-1)/2, 0.0);
+    unsigned long ind;
+    for (int i = 1; i < nx; ++i) {
+        for (int j = 0; j < i; ++j) {
+            ind = nx*j - j*(j+1)/2 + i - 1 - j;
+            v[ind] = dist(x[i], x[j]);
+        }
+    }
+    return v;
+}
+
+vector<vector<double>> squareform(vector<double>& v) {
+    // Convert distance matrix from vector form to square form
+    // Note: vector of vectors may not be efficient - maybe just return regular array of arrays?
+    unsigned long nx = (1 + sqrt(1 + 8*v.size())) / 2; // must be an integer if v is valid
+    vector<vector<double>> M (nx, vector<double>(nx, 0.0));
+    unsigned long ind;
+    for (int i = 1; i < nx; ++i) {
+        for (int j = 0; j < i; ++j) {
+            ind = nx*j - j*(j+1)/2 + i - 1 - j;
+            M[i][j] = v[ind];
+            M[j][i] = v[ind];
+        }
+    }
+    return M;
 }
 
 int main() {
@@ -91,15 +111,18 @@ int main() {
 
     // Test out edit (Levenstein) distance of 2 strings
     cout << "Calculating edit distances..." << endl;
-    string s1 = "abc";
-    string s2 = "bcd";
-    string s3 = "";  // empty
-    string s4 = "abcd";
+    string s0 = "abc";
+    string s1 = "bcd";
+    string s2 = "";  // empty
+    string s3 = "abcd";
 
-    cout << levenstein(s1, s2) << endl;
-    cout << levenstein(s1, s1) << endl;
-    cout << levenstein(s1, s3) << endl;
-    cout << levenstein(s1, s4) << endl;
+    // Same order as pdist's output below
+    cout << levenstein(s1, s0) << endl;
+    cout << levenstein(s2, s0) << endl;
+    cout << levenstein(s3, s0) << endl;
+    cout << levenstein(s2, s1) << endl;
+    cout << levenstein(s3, s1) << endl;
+    cout << levenstein(s3, s2) << endl;
 
     // Some more strings
     cout << "Calculating more edit distances..." << endl;
@@ -112,12 +135,23 @@ int main() {
     cout << levenstein(t1, t2, 0.9, 1.1, 2.0) << endl;
 
     // Test out distance matrix calc
-    cout << "Calculating distance matrix..." << endl;
-    vector<string> strs {s1, s2, s3, s4};
-    vector<double> dm = dist_mat(strs, levenstein);  // CLion incorrectly says dist arg is an error
-    for (double dmi : dm) {
-        cout << dmi << endl;
+    cout << "Calculating distance matrix in vector form..." << endl;
+    vector<string> strs {s0, s1, s2, s3};
+    vector<double> dv = pdist(strs, levenstein);  // CLion incorrectly says dist arg is an error
+    for (double dvi : dv) {
+        cout << dvi << endl;
     }
+
+    // Test out squareform
+    vector<double> v {1, 2, 3, 4, 5, 6};
+    // M should be:
+    // 0 1 2 3
+    // 1 0 4 5
+    // 2 4 0 6
+    // 3 5 6 0
+    auto M = squareform(v);
+
+    auto dm = squareform(dv);
 
     return 0;
 }
