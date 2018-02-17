@@ -1,14 +1,18 @@
 #include <iostream>
 #include <vector>
+#include <tuple>
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <thread>
 
 using std::cout;
 using std::endl;
 using std::vector;
 using std::string;
 using std::pair;
+using std::tuple;
+using std::get;
 using std::size_t;
 
 double euclidean(const vector<double>& x1, const vector<double>& x2) {
@@ -67,14 +71,14 @@ double levenstein(const string& s1, const string& s2) {
 
 template <class T>
 vector<double> pdist(const vector<T>& x, double (*dist)(const T&, const T&)) {
-    // Distance matrix between all pairs in x, in order of x, in vector form (lower triangle entries), using specified
+    // Distance matrix between all pairs in x, in order of x, in vector form (upper triangle entries), using specified
     // distance function
     size_t nx = x.size();
     size_t ind;
     vector<double> v (nx*(nx-1)/2, 0.0);
-    for (size_t i = 1; i < nx; ++i) {
-        for (size_t j = 0; j < i; ++j) {
-            ind = nx*j - j*(j+1)/2 + i - 1 - j;  // always an integer
+    for (size_t i = 0; i < nx-1; ++i) {
+        for (size_t j = i+1; j < nx; ++j) {
+            ind = j - 1 - i*(3+i-2*nx)/2;
             v[ind] = dist(x[i], x[j]);
         }
     }
@@ -88,7 +92,7 @@ vector<double> pdist(const vector<T>& x, double (*dist)(const T&, const T&)) {
 //}
 
 template <typename Iterator>
-vector<pair<Iterator, Iterator>> divide_work(Iterator begin, Iterator end, size_t n) {
+vector<pair<Iterator, Iterator>> split_chunks(Iterator begin, Iterator end, size_t n) {
     // Divide iterable into multiple iterables of similar size
     // Source: https://codereview.stackexchange.com/questions/106773/dividing-a-range-into-n-sub-ranges
     vector<pair<Iterator, Iterator>> ranges;
@@ -116,40 +120,61 @@ vector<pair<Iterator, Iterator>> divide_work(Iterator begin, Iterator end, size_
 }
 
 template <class T>
+void pdist_range(vector<tuple<size_t,size_t,size_t>>::iterator begin, vector<tuple<size_t,size_t,size_t>>::iterator end,
+                 vector<double>& v, const vector<T> &x, double (*dist)(const T &, const T &)) {
+    // Helper function to calculate pairwise distances specified by range
+    for (auto it = begin; it != end; ++it) {
+        v[get<2>(*it)] = dist(x[get<0>(*it)], x[get<1>(*it)]);
+    }
+}
+
+template <class T>
 vector<double> ppdist(const vector<T> &x, double (*dist)(const T &, const T &), int n_threads) {
     // Parallel version of pdist
     // Get indices of diagonal elements
     size_t nx = x.size();
     size_t nv = nx*(nx-1)/2;
-    vector<size_t> rows;
-    vector<size_t> cols;
-    rows.reserve(nv);
-    cols.reserve(nv);
-    for (size_t i = 1; i < nx; ++i) {
-        for (size_t j = 0; j < i; ++j) {
-            rows.push_back(i);
-            cols.push_back(j);
+    size_t ind = 0;
+    vector<tuple<size_t,size_t,size_t>> inds;
+    inds.reserve(nv);
+    for (size_t i = 0; i < nx-1; ++i) {
+        for (size_t j = i+1; j < nx; ++j) {
+            inds.emplace_back(tuple<size_t,size_t,size_t>(i, j, ind));
+            ++ind;
         }
     }
 
     // Split indices between threads
+    auto chunks = split_chunks(inds.begin(), inds.end(), n_threads);
 
+    // Debug: show inds assigned to each chunk
+//    for (auto chunk : chunks) {
+//        for (auto it = chunk.first; it != chunk.second; ++it) {
+//            cout << "(" << get<0>(*it) << "," << get<1>(*it) << ") ";
+//        }
+//        cout << endl;
+//    }
 
     // Run
     vector<double> v (nv, 0.0);
+    for (auto chunk : chunks) {
+        pdist_range(chunk.first, chunk.second, v, x, dist);
+    }
 
     return v;
 }
 
 vector<vector<double>> squareform(vector<double>& v) {
     // Convert distance matrix from vector form to square form
+    // Upper triangular indexes ind = (nx choose 2) - (nx-1 choose 2) + j - i - 1
+    // See: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.squareform.html#scipy.spatial.distance.squareform
     // Note: vector of vectors may not be efficient - maybe just return regular array of arrays?
     size_t nx = (1 + std::sqrt(1 + 8*v.size())) / 2; // must be an integer if v is valid
     vector<vector<double>> M (nx, vector<double>(nx, 0.0));
     unsigned long ind;
-    for (size_t i = 1; i < nx; ++i) {
-        for (size_t j = 0; j < i; ++j) {
-            ind = nx*j - j*(j+1)/2 + i - 1 - j;
+    for (size_t i = 0; i < nx-1; ++i) {
+        for (size_t j = i+1; j < nx; ++j) {
+            ind = j - 1 - i*(3+i-2*nx)/2;
             M[i][j] = v[ind];
             M[j][i] = v[ind];
         }
@@ -185,22 +210,22 @@ int main() {
     string s3 = "abcd";
 
     // Same order as pdist's output below
-    cout << levenstein(s1, s0) << endl;
-    cout << levenstein(s2, s0) << endl;
-    cout << levenstein(s3, s0) << endl;
-    cout << levenstein(s2, s1) << endl;
-    cout << levenstein(s3, s1) << endl;
-    cout << levenstein(s3, s2) << endl;
+    cout << levenstein(s0, s1) << endl;
+    cout << levenstein(s0, s2) << endl;
+    cout << levenstein(s0, s3) << endl;
+    cout << levenstein(s1, s2) << endl;
+    cout << levenstein(s1, s3) << endl;
+    cout << levenstein(s2, s3) << endl;
 
     // Some more strings
-    cout << "Calculating more edit distances..." << endl;
-    string t1 = "g5a23g5a3av34acra2ct";
-    string t2 = "bacbzV#35v#V#nk";
-    string t3 = "fdafdsafsafsa";
-
-    cout << levenstein(t1, t2) << endl;  // 17
-    cout << levenstein(t2, t3) << endl;  // 15
-    cout << levenstein(t1, t2, 0.9, 1.1, 2.0) << endl;
+//    cout << "Calculating more edit distances..." << endl;
+//    string t1 = "g5a23g5a3av34acra2ct";
+//    string t2 = "bacbzV#35v#V#nk";
+//    string t3 = "fdafdsafsafsa";
+//
+//    cout << levenstein(t1, t2) << endl;  // 17
+//    cout << levenstein(t2, t3) << endl;  // 15
+//    cout << levenstein(t1, t2, 0.9, 1.1, 2.0) << endl;
 
     // Test out distance matrix calc
     cout << "Calculating distance matrix in vector form..." << endl;
@@ -218,14 +243,14 @@ int main() {
     }
 
     // Test out squareform
-    vector<double> v {1, 2, 3, 4, 5, 6};
+//    vector<double> v {1, 2, 3, 4, 5, 6};
     // M should be:
     // 0 1 2 3
     // 1 0 4 5
     // 2 4 0 6
     // 3 5 6 0
-    auto M = squareform(v);
-    print_mat(M);
+//    auto M = squareform(v);
+//    print_mat(M);
 
     auto dm = squareform(dv);
     print_mat(dm);
