@@ -7,17 +7,16 @@
 using std::cout;
 using std::endl;
 using std::vector;
-using std::pow;
-using std::sqrt;
-using std::min_element;
 using std::string;
+using std::pair;
+using std::size_t;
 
 double euclidean(const vector<double>& x1, const vector<double>& x2) {
     double d2 = 0.0;
-    for (int i = 0; i < x1.size(); ++i) {
-        d2 += pow(x1[i] - x2[i], 2);
+    for (size_t i = 0; i < x1.size(); ++i) {
+        d2 += std::pow(x1[i] - x2[i], 2);
     }
-    return sqrt(d2);
+    return std::sqrt(d2);
 }
 
 double levenstein(const string& s1, const string& s2, double del, double ins, double sub) {
@@ -27,25 +26,24 @@ double levenstein(const string& s1, const string& s2, double del, double ins, do
 
     // For all i and j, dist[i,j] will contain the Levenshtein distance between the first i characters of a and the
     // first j characters of b
-    auto n_rows = s1.size() + 1;
-    auto n_cols = s2.size() + 1;
-    // variable length array allowed in GCC
-    double dist[n_rows][n_cols]; // don't need to 0-fill since it's filled from NW-> SE when running below
+    size_t n_rows = s1.size() + 1;
+    size_t n_cols = s2.size() + 1;
+    vector<vector<double>> dist (n_rows, vector<double>(n_cols, 0.0)); // do this properly; it can get big
 
     // Source prefixes can be transformed into empty strings by deletions
-    for (int row = 1; row < n_rows; ++row) {
+    for (size_t row = 1; row < n_rows; ++row) {
         dist[row][0] = row * del;
     }
 
     // Target prefixes can be created from an empty source string by inserting the characters
-    for (int col = 1; col < n_cols; ++col) {
+    for (size_t col = 1; col < n_cols; ++col) {
         dist[0][col] = col * ins;
     }
 
     double cost;
     vector<double> subcost {0.0, 0.0, 0.0};
-    for (int col = 1; col < n_cols; ++col) {
-        for (int row = 1; row < n_rows; ++row) {
+    for (size_t col = 1; col < n_cols; ++col) {
+        for (size_t row = 1; row < n_rows; ++row) {
             if (s1[row-1] == s2[col-1]) {
                 cost = 0.0;
             } else {
@@ -54,7 +52,7 @@ double levenstein(const string& s1, const string& s2, double del, double ins, do
             subcost[0] = dist[row-1][col] + del;
             subcost[1] = dist[row][col-1] + ins;
             subcost[2] = dist[row-1][col-1] + cost;  // substitution
-            dist[row][col] = *min_element(subcost.begin(), subcost.end());
+            dist[row][col] = *std::min_element(subcost.begin(), subcost.end());
         }
     }
 
@@ -68,35 +66,105 @@ double levenstein(const string& s1, const string& s2) {
 }
 
 template <class T>
-vector<double> pdist(const vector<T> &x, double (*dist)(const T &, const T &)) {
+vector<double> pdist(const vector<T>& x, double (*dist)(const T&, const T&)) {
     // Distance matrix between all pairs in x, in order of x, in vector form (lower triangle entries), using specified
     // distance function
-    auto nx = x.size();
+    size_t nx = x.size();
+    size_t ind;
     vector<double> v (nx*(nx-1)/2, 0.0);
-    unsigned long ind;
-    for (int i = 1; i < nx; ++i) {
-        for (int j = 0; j < i; ++j) {
-            ind = nx*j - j*(j+1)/2 + i - 1 - j;
+    for (size_t i = 1; i < nx; ++i) {
+        for (size_t j = 0; j < i; ++j) {
+            ind = nx*j - j*(j+1)/2 + i - 1 - j;  // always an integer
             v[ind] = dist(x[i], x[j]);
         }
     }
     return v;
 }
 
+//template <class T>
+//vector<double> pdist1(const vector<T>& x, const T& q) {
+//    // Distance vector between points in x and single point q
+//
+//}
+
+template <typename Iterator>
+vector<pair<Iterator, Iterator>> divide_work(Iterator begin, Iterator end, size_t n) {
+    // Divide iterable into multiple iterables of similar size
+    // Source: https://codereview.stackexchange.com/questions/106773/dividing-a-range-into-n-sub-ranges
+    vector<pair<Iterator, Iterator>> ranges;
+    if (n == 0) {
+        return ranges;
+    }
+    ranges.reserve(n);
+
+    auto dist = std::distance(begin, end);
+    n = std::min<size_t>(n, dist);
+    auto chunk = dist / n;
+    auto remainder = dist % n;
+
+    for (size_t i = 0; i < n-1; ++i) {
+        auto next_end = std::next(begin, chunk + (remainder ? 1 : 0));
+        ranges.emplace_back(begin, next_end);
+
+        begin = next_end;
+        if (remainder) remainder -= 1;
+    }
+
+    // last chunk
+    ranges.emplace_back(begin, end);
+    return ranges;
+}
+
+template <class T>
+vector<double> ppdist(const vector<T> &x, double (*dist)(const T &, const T &), int n_threads) {
+    // Parallel version of pdist
+    // Get indices of diagonal elements
+    size_t nx = x.size();
+    size_t nv = nx*(nx-1)/2;
+    vector<size_t> rows;
+    vector<size_t> cols;
+    rows.reserve(nv);
+    cols.reserve(nv);
+    for (size_t i = 1; i < nx; ++i) {
+        for (size_t j = 0; j < i; ++j) {
+            rows.push_back(i);
+            cols.push_back(j);
+        }
+    }
+
+    // Split indices between threads
+
+
+    // Run
+    vector<double> v (nv, 0.0);
+
+    return v;
+}
+
 vector<vector<double>> squareform(vector<double>& v) {
     // Convert distance matrix from vector form to square form
     // Note: vector of vectors may not be efficient - maybe just return regular array of arrays?
-    unsigned long nx = (1 + sqrt(1 + 8*v.size())) / 2; // must be an integer if v is valid
+    size_t nx = (1 + std::sqrt(1 + 8*v.size())) / 2; // must be an integer if v is valid
     vector<vector<double>> M (nx, vector<double>(nx, 0.0));
     unsigned long ind;
-    for (int i = 1; i < nx; ++i) {
-        for (int j = 0; j < i; ++j) {
+    for (size_t i = 1; i < nx; ++i) {
+        for (size_t j = 0; j < i; ++j) {
             ind = nx*j - j*(j+1)/2 + i - 1 - j;
             M[i][j] = v[ind];
             M[j][i] = v[ind];
         }
     }
     return M;
+}
+
+void print_mat(vector<vector<double>>& M) {
+    // Print matrix in convenient form
+    for (vector<double> row : M) {
+        for (double e : row) {
+            cout << e << " ";
+        }
+        cout << endl;
+    }
 }
 
 int main() {
@@ -142,6 +210,13 @@ int main() {
         cout << dvi << endl;
     }
 
+    cout << "Calculating distance matrix in vector form in parallel..." << endl;
+    int n_threads = 4;
+    vector<double> dvp = ppdist(strs, levenstein, n_threads);  // CLion incorrectly says dist arg is an error
+    for (double dvi : dvp) {
+        cout << dvi << endl;
+    }
+
     // Test out squareform
     vector<double> v {1, 2, 3, 4, 5, 6};
     // M should be:
@@ -150,8 +225,10 @@ int main() {
     // 2 4 0 6
     // 3 5 6 0
     auto M = squareform(v);
+    print_mat(M);
 
     auto dm = squareform(dv);
+    print_mat(dm);
 
     return 0;
 }
