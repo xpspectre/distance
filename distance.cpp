@@ -22,6 +22,7 @@ double euclidean(const vector<double>& x1, const vector<double>& x2) {
 
 double levenstein(const string& s1, const string& s2, double del, double ins, double sub) {
     // Edit distance of strings using user-specified costs
+    // Note that the del and ins costs should be the same to ensure the distance is symmetric
     // Note: doesn't use default params since function pointers passed as args into other functions don't recognize them
     // Source: http://www.python-course.eu/levenshtein_distance.php
 
