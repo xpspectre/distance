@@ -3,4 +3,7 @@ project(distance)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(distance main.cpp)
+include_directories(external)
+
+add_executable(distance main.cpp distance.cpp distance.h util.cpp util.h)
+add_executable(run_tests test.cpp test_distance.cpp distance.cpp distance.h util.cpp util.h)
