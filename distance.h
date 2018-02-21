@@ -81,7 +81,7 @@ std::vector<double> ppdist(const std::vector<T> &x, double (*dist)(const T &, co
     inds.reserve(nv);
     for (size_t i = 0; i < nx - 1; ++i) {
         for (size_t j = i + 1; j < nx; ++j) {
-            inds.emplace_back(std::tuple<size_t, size_t, size_t>(i, j, ind));
+            inds.emplace_back(i, j, ind);
             ++ind;
         }
     }
@@ -105,7 +105,7 @@ std::vector<double> ppdist(const std::vector<T> &x, double (*dist)(const T &, co
     // Multi-threaded
     std::vector<std::thread> ths;
     for (auto chunk : chunks) {
-        ths.emplace_back(std::thread(pdist_range<T>, chunk.first, chunk.second, std::ref(v), std::cref(x), dist));  // CLion incorrectly reports wrong # args
+        ths.emplace_back(pdist_range<T>, chunk.first, chunk.second, std::ref(v), std::cref(x), dist);  // CLion incorrectly reports wrong # args
     }
     for (auto &th: ths) {
         th.join();
